@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, WebviewWindow,
@@ -15,8 +16,11 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit Time Tracker", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&quit])?;
 
+    // Monochrome template icon (transparent bg) so macOS tints it for the menu bar.
+    let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+
     TrayIconBuilder::with_id("main-tray")
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon)
         .icon_as_template(true) // adapts to light/dark menu bar
         .tooltip("Time Tracker — Idle")
         .menu(&menu)
