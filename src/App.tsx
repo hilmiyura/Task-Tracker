@@ -126,7 +126,7 @@ export default function App() {
         data-tauri-drag-region
         className="flex items-center justify-between px-3.5 pt-3 pb-2"
       >
-        <span className="text-[13px] font-semibold tracking-tight">Time Tracker</span>
+        <span className="text-[13px] font-semibold tracking-tight">Task Tracker</span>
         <div className="flex items-center gap-2">
           {!showSettings && (
             <span

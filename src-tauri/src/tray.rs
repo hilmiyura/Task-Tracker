@@ -13,7 +13,7 @@ const POPUP_WIDTH: f64 = 320.0;
 
 /// Build the menu bar tray icon and wire up click-to-toggle behaviour.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
-    let quit = MenuItem::with_id(app, "quit", "Quit Time Tracker", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Task Tracker", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&quit])?;
 
     // Monochrome template icon (transparent bg) so macOS tints it for the menu bar.
@@ -22,7 +22,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id("main-tray")
         .icon(icon)
         .icon_as_template(true) // adapts to light/dark menu bar
-        .tooltip("Time Tracker — Idle")
+        .tooltip("Task Tracker — Idle")
         .menu(&menu)
         // Left click toggles the popup; right click opens the menu.
         .show_menu_on_left_click(false)
@@ -82,9 +82,9 @@ pub fn set_tray_state(app: AppHandle, active: bool) {
 
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_tooltip(Some(if active {
-            "Time Tracker — Active"
+            "Task Tracker — Active"
         } else {
-            "Time Tracker — Idle"
+            "Task Tracker — Idle"
         }));
         // Show a small dot beside the icon while a task is running.
         let _ = tray.set_title(Some(if active { "●" } else { "" }));

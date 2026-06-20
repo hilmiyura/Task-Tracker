@@ -1,12 +1,12 @@
 [package]
-name = "time-tracker"
+name = "task-tracker"
 version = "0.1.0"
-description = "Time Tracker macOS menu bar app"
+description = "Task Tracker macOS menu bar app"
 authors = ["Muhammad Hilmi Yura"]
 edition = "2021"
 
 [lib]
-name = "time_tracker_lib"
+name = "task_tracker_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

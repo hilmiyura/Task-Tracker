@@ -36,7 +36,7 @@ pub fn start_scheduler(app: AppHandle) {
             let _ = app
                 .notification()
                 .builder()
-                .title("Time Tracker")
+                .title("Task Tracker")
                 .body("Belum ada task aktif. Mau mulai mencatat sekarang?")
                 .show();
         }

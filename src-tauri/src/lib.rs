@@ -34,7 +34,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building Time Tracker")
+        .expect("error while building Task Tracker")
         .run(|_app, event| {
             // Keep running in the background when the popup window closes.
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
