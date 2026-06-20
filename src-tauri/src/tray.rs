@@ -80,6 +80,15 @@ pub fn set_tray_state(app: AppHandle, active: bool) {
     let state = app.state::<AppState>();
     state.task_active.store(active, Ordering::Relaxed);
 
+    // Track when the task started so the scheduler can warn after 3 hours,
+    // and reset the "already warned" flag for each new task run.
+    if active {
+        *state.task_started_at.lock().unwrap() = Some(std::time::Instant::now());
+        state.long_task_notified.store(false, Ordering::Relaxed);
+    } else {
+        *state.task_started_at.lock().unwrap() = None;
+    }
+
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_tooltip(Some(if active {
             "Task Tracker — Active"
