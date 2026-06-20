@@ -1,7 +1,7 @@
 /**
- * Time Tracker — Google Apps Script Web App
+ * Task Tracker — Google Apps Script Web App
  *
- * Menerima POST JSON dari aplikasi Time Tracker dan menuliskannya ke baris baru
+ * Menerima POST JSON dari aplikasi Task Tracker dan menuliskannya ke baris baru
  * pada tab "Muhammad Hilmi Yura" dengan pemetaan kolom:
  *   B = tanggal   (date)
  *   C = jam mulai (start)
@@ -82,7 +82,7 @@ function firstEmptyRow(sheet) {
 
 // Opsional: cek cepat di browser bahwa Web App hidup.
 function doGet() {
-  return json({ ok: true, service: "Time Tracker webhook" });
+  return json({ ok: true, service: "Task Tracker webhook" });
 }
 
 function json(obj) {

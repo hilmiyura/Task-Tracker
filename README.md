@@ -1,4 +1,4 @@
-# Time Tracker — macOS Menu Bar App
+# Task Tracker — macOS Menu Bar App
 
 A lightweight macOS **menu bar** app to log daily work activity (task description + start/end time) and automatically sync each finished entry to a **Google Sheet**. Built with **Tauri v2 + React + Tailwind**, designed to feel native (vibrancy popover, system fonts, light/dark aware).
 
@@ -88,10 +88,10 @@ npm run tauri build
 
 Build outputs:
 
-- App: `src-tauri/target/release/bundle/macos/Time Tracker.app`
-- Installer: `src-tauri/target/release/bundle/dmg/Time Tracker_0.1.0_aarch64.dmg`
+- App: `src-tauri/target/release/bundle/macos/Task Tracker.app`
+- Installer: `src-tauri/target/release/bundle/dmg/Task Tracker_0.1.0_aarch64.dmg`
 
-To install: open the `.dmg` and drag **Time Tracker.app** to **Applications**, or copy the `.app` directly.
+To install: open the `.dmg` and drag **Task Tracker.app** to **Applications**, or copy the `.app` directly.
 
 > The app is **ad-hoc signed** (no Apple Developer certificate). On first launch macOS may warn it's from an unidentified developer — right-click the app → **Open**, or allow it in **System Settings → Privacy & Security**.
 
@@ -119,7 +119,7 @@ To install: open the `.dmg` and drag **Time Tracker.app** to **Applications**, o
 
 ### 3. Connect the app
 
-1. Click the Time Tracker tray icon → **⚙︎** (top-right).
+1. Click the Task Tracker tray icon → **⚙︎** (top-right).
 2. Paste the Web app URL → **Simpan** (Save).
 3. **Start** then **Stop** a task. The entry shows ⏳ → ✓ (or ⚠ on error — hover for the message).
 
@@ -184,7 +184,7 @@ Other tweaks:
 
 ## Privacy
 
-- The webhook URL is stored locally in the app config directory (`~/Library/Application Support/com.hilmiyura.timetracker/config.json`).
+- The webhook URL is stored locally in the app config directory (`~/Library/Application Support/com.hilmiyura.tasktracker/config.json`).
 - Time entries are sent only to the Google Apps Script URL you configure — nowhere else.
 
 ---
