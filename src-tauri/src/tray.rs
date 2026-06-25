@@ -9,7 +9,7 @@ use tauri::{
 
 use crate::AppState;
 
-const POPUP_WIDTH: f64 = 320.0;
+const POPUP_WIDTH: f64 = 300.0;
 
 /// Build the menu bar tray icon and wire up click-to-toggle behaviour.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
