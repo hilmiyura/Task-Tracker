@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+
+const WINDOW_WIDTH = 300;
+const MAX_WINDOW_HEIGHT = 480;
 
 type SyncStatus = "syncing" | "ok" | "error";
 
@@ -12,6 +16,18 @@ type Entry = {
   duration: string;
   status: SyncStatus;
   error?: string;
+};
+
+type View = "main" | "system" | "settings";
+
+type Metrics = {
+  cpu: number;
+  memUsed: number;
+  memTotal: number;
+  diskUsed: number;
+  diskTotal: number;
+  netDown: number;
+  netUp: number;
 };
 
 /** Format seconds as HH:MM:SS for the live timer. */
@@ -37,15 +53,87 @@ function dateStr(d: Date): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+/** Bytes → human size, e.g. 1.2 GB. */
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const val = bytes / Math.pow(1024, i);
+  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+/** Bytes/second → human rate, e.g. 1.2 MB/s. */
+function formatRate(bps: number): string {
+  return `${formatBytes(bps)}/s`;
+}
+
+/** Tailwind bar color by load percentage. */
+function barColor(pct: number): string {
+  if (pct >= 85) return "bg-red-500";
+  if (pct >= 60) return "bg-amber-500";
+  return "bg-blue-500";
+}
+
+function MetricBar({
+  label,
+  value,
+  pct,
+}: {
+  label: string;
+  value: string;
+  pct: number;
+}) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] font-medium text-black/55 dark:text-white/55">
+          {label}
+        </span>
+        <span className="text-[11px] tabular-nums text-black/70 dark:text-white/75">
+          {value}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor(clamped)}`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [task, setTask] = useState("");
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0); // seconds
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<View>("main");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [savedHint, setSavedHint] = useState("");
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const startedAt = useRef<Date | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Resize the window to fit the panel content (capped), so there is no empty
+  // space when there are few/no entries.
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    let last = 0;
+    const apply = () => {
+      const h = Math.min(MAX_WINDOW_HEIGHT, Math.ceil(el.scrollHeight));
+      if (h > 0 && Math.abs(h - last) >= 1) {
+        last = h;
+        getCurrentWindow().setSize(new LogicalSize(WINDOW_WIDTH, h)).catch(() => {});
+      }
+    };
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    apply();
+    return () => ro.disconnect();
+  }, []);
 
   // load the saved webhook URL once
   useEffect(() => {
@@ -64,6 +152,24 @@ export default function App() {
     }, 1000);
     return () => clearInterval(id);
   }, [running]);
+
+  // poll system metrics while the System view is open
+  useEffect(() => {
+    if (view !== "system") return;
+    let alive = true;
+    const tick = () =>
+      invoke<Metrics>("get_metrics")
+        .then((m) => {
+          if (alive) setMetrics(m);
+        })
+        .catch(() => {});
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [view]);
 
   function syncTray(active: boolean) {
     invoke("set_tray_state", { active }).catch(() => {});
@@ -101,7 +207,6 @@ export default function App() {
     startedAt.current = null;
     syncTray(false);
 
-    // Push to Google Sheets via the webhook (handled in Rust).
     const { id, status, error, ...payload } = entry;
     void status;
     void error;
@@ -119,18 +224,34 @@ export default function App() {
       .catch((err: string) => setSavedHint(String(err)));
   }
 
+  function toggleView(v: View) {
+    setView((cur) => (cur === v ? "main" : v));
+  }
+
+  const memPct = metrics && metrics.memTotal ? (metrics.memUsed / metrics.memTotal) * 100 : 0;
+  const diskPct = metrics && metrics.diskTotal ? (metrics.diskUsed / metrics.diskTotal) * 100 : 0;
+
+  const iconBtn =
+    "rounded p-0.5 transition text-black/40 hover:text-black/80 dark:text-white/40 dark:hover:text-white/90";
+  const iconBtnActive = "text-blue-500 dark:text-blue-400";
+
   return (
-    <div className="flex h-full w-full flex-col text-black/85 dark:text-white/90">
+    <div
+      ref={panelRef}
+      className="glass-panel flex max-h-[480px] w-full flex-col overflow-hidden rounded-[14px] text-black/85 dark:text-white/90"
+    >
       {/* Title bar */}
       <div
         data-tauri-drag-region
         className="flex items-center justify-between px-3.5 pt-3 pb-2"
       >
-        <span className="text-[13px] font-semibold tracking-tight">Task Tracker</span>
-        <div className="flex items-center gap-2">
-          {!showSettings && (
+        <span className="text-[13px] font-semibold tracking-tight">
+          {view === "system" ? "System" : view === "settings" ? "Settings" : "Task Tracker"}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {view === "main" && (
             <span
-              className={`flex items-center gap-1.5 text-[11px] font-medium ${
+              className={`mr-1 flex items-center gap-1.5 text-[11px] font-medium ${
                 running ? "text-green-600 dark:text-green-400" : "text-black/40 dark:text-white/40"
               }`}
             >
@@ -143,29 +264,32 @@ export default function App() {
             </span>
           )}
           <button
-            onClick={() => setShowSettings((s) => !s)}
-            title="Settings"
-            className="rounded p-0.5 text-black/40 transition hover:text-black/80 dark:text-white/40 dark:hover:text-white/90"
+            onClick={() => toggleView("system")}
+            title="System metrics"
+            className={`${iconBtn} ${view === "system" ? iconBtnActive : ""}`}
           >
-            {showSettings ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            )}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12h4l2 6 4-14 2 8h6" />
+            </svg>
+          </button>
+          <button
+            onClick={() => toggleView("settings")}
+            title="Settings"
+            className={`${iconBtn} ${view === "settings" ? iconBtnActive : ""}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
           </button>
         </div>
       </div>
 
       <div className="mx-3.5 border-t border-black/10 dark:border-white/10" />
 
-      {showSettings ? (
+      {view === "settings" ? (
         /* Settings */
-        <div className="flex flex-1 flex-col gap-2 px-3.5 py-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3.5 py-3">
           <label className="text-[11px] font-medium text-black/55 dark:text-white/55">
             Google Sheets — Webhook URL
           </label>
@@ -192,9 +316,61 @@ export default function App() {
             otomatis saat menekan Stop.
           </p>
         </div>
+      ) : view === "system" ? (
+        /* System metrics */
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 py-3">
+          {!metrics ? (
+            <div className="flex flex-1 items-center justify-center text-[12px] text-black/40 dark:text-white/40">
+              Membaca metrik…
+            </div>
+          ) : (
+            <>
+              <MetricBar
+                label="CPU"
+                value={`${metrics.cpu.toFixed(1)}%`}
+                pct={metrics.cpu}
+              />
+              <MetricBar
+                label="Memory"
+                value={`${formatBytes(metrics.memUsed)} / ${formatBytes(metrics.memTotal)}`}
+                pct={memPct}
+              />
+              <MetricBar
+                label="Disk"
+                value={`${formatBytes(metrics.diskUsed)} / ${formatBytes(metrics.diskTotal)}`}
+                pct={diskPct}
+              />
+
+              {/* Network rates */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-medium text-black/55 dark:text-white/55">
+                  Network
+                </span>
+                <div className="flex gap-2">
+                  <div className="flex flex-1 items-center gap-1.5 rounded-md bg-black/[0.04] px-2.5 py-1.5 dark:bg-white/[0.06]">
+                    <span className="text-green-600 dark:text-green-400">↓</span>
+                    <span className="text-[12px] tabular-nums text-black/75 dark:text-white/80">
+                      {formatRate(metrics.netDown)}
+                    </span>
+                  </div>
+                  <div className="flex flex-1 items-center gap-1.5 rounded-md bg-black/[0.04] px-2.5 py-1.5 dark:bg-white/[0.06]">
+                    <span className="text-blue-600 dark:text-blue-400">↑</span>
+                    <span className="text-[12px] tabular-nums text-black/75 dark:text-white/80">
+                      {formatRate(metrics.netUp)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-auto text-[10px] text-black/35 dark:text-white/35">
+                Diperbarui tiap 2 detik · disk = volume utama
+              </p>
+            </>
+          )}
+        </div>
       ) : (
-        /* Main */
-        <div className="flex flex-1 flex-col gap-3 px-3.5 py-3">
+        /* Main tracker */
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3.5 py-3">
           <input
             type="text"
             value={task}

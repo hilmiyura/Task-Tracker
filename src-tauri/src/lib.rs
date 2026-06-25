@@ -1,3 +1,4 @@
+mod metrics;
 mod notification;
 mod sheets;
 mod timer;
@@ -26,11 +27,13 @@ pub fn run() {
             task_started_at: Mutex::new(None),
             long_task_notified: AtomicBool::new(false),
         })
+        .manage(metrics::MetricsState::new())
         .invoke_handler(tauri::generate_handler![
             tray::set_tray_state,
             sheets::get_webhook_url,
             sheets::set_webhook_url,
-            sheets::sync_entry
+            sheets::sync_entry,
+            metrics::get_metrics
         ])
         .setup(|app| {
             // Hide the Dock icon — this is a menu bar (accessory) app.
