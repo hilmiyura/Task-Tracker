@@ -24,3 +24,55 @@ body {
 input::selection {
   background: rgba(10, 132, 255, 0.35);
 }
+
+/* ---- Liquid Glass ----
+ * The frosted blur comes from the NATIVE macOS vibrancy (windowEffects:
+ * "popover") which is GPU-stable. CSS only adds the "liquid" sheen and
+ * specular highlights on top — NO backdrop-filter here, because CSS
+ * backdrop-filter flickers on transparent WKWebView windows. */
+.glass-panel {
+  background-image:
+    /* glossy top sheen — the "liquid" highlight */
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.45) 0%,
+      rgba(255, 255, 255, 0.08) 20%,
+      rgba(255, 255, 255, 0) 42%
+    ),
+    /* very faint diagonal tint to enrich the native material */
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0.04) 50%,
+      rgba(255, 255, 255, 0.12) 100%
+    );
+  box-shadow:
+    /* bright top specular edge */
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.9),
+    /* hairline glass border */
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    /* soft inner bottom shade for depth */
+    inset 0 -8px 24px rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  .glass-panel {
+    background-image:
+      linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.14) 0%,
+        rgba(255, 255, 255, 0.03) 20%,
+        rgba(255, 255, 255, 0) 42%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.06) 0%,
+        rgba(255, 255, 255, 0.02) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+      );
+    box-shadow:
+      inset 0 1px 1.5px rgba(255, 255, 255, 0.2),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 -8px 24px rgba(0, 0, 0, 0.22);
+  }
+}

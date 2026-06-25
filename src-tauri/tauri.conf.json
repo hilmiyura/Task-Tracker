@@ -27,9 +27,9 @@
         "visible": false,
         "center": false,
         "windowEffects": {
-          "effects": ["menu"],
+          "effects": ["popover"],
           "state": "active",
-          "radius": 12
+          "radius": 14
         }
       }
     ],
