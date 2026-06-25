@@ -32,6 +32,21 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .on_tray_icon_event(|tray, event| {
+            let app = tray.app_handle();
+
+            // Remember the icon position from any event that carries it, so the
+            // scheduler can anchor a force-opened popup under the icon.
+            let pos = match &event {
+                TrayIconEvent::Click { rect, .. }
+                | TrayIconEvent::DoubleClick { rect, .. }
+                | TrayIconEvent::Enter { rect, .. }
+                | TrayIconEvent::Move { rect, .. } => Some(rect.position.clone()),
+                _ => None,
+            };
+            if let Some(p) = pos {
+                *app.state::<AppState>().tray_pos.lock().unwrap() = Some(p);
+            }
+
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -39,7 +54,6 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     toggle_popup(&window, rect.position);
                 }
@@ -50,25 +64,56 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Show the popup just under the tray icon (top-right), or hide it if visible.
-fn toggle_popup(window: &WebviewWindow, tray_pos: tauri::Position) {
-    if window.is_visible().unwrap_or(false) {
-        let _ = window.hide();
-        return;
-    }
-
-    // The tray click position may come as logical or physical units; normalise
-    // to physical so set_position lands in the right spot on Retina displays.
+/// Position the popup centred just below the given tray-icon position.
+fn place_popup(window: &WebviewWindow, tray_pos: tauri::Position) {
+    // The tray position may come as logical or physical units; normalise to
+    // physical so set_position lands in the right spot on Retina displays.
     let scale = window.scale_factor().unwrap_or(1.0);
     let phys = match tray_pos {
         tauri::Position::Physical(p) => tauri::PhysicalPosition::new(p.x as f64, p.y as f64),
         tauri::Position::Logical(p) => tauri::PhysicalPosition::new(p.x * scale, p.y * scale),
     };
-
-    // Anchor the popup centred under the tray icon, a few px below the bar.
     let x = phys.x - (POPUP_WIDTH * scale) / 2.0;
     let y = phys.y + 8.0;
     let _ = window.set_position(tauri::PhysicalPosition { x, y });
+}
+
+/// Toggle the popup on tray click: hide if visible, else show under the icon.
+fn toggle_popup(window: &WebviewWindow, tray_pos: tauri::Position) {
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
+    }
+    place_popup(window, tray_pos);
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Force the popup open under the tray icon. Used by the scheduler's idle
+/// reminder so the user is nudged to fill a task.
+pub fn show_popup(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let stored = app.state::<AppState>().tray_pos.lock().unwrap().clone();
+    if let Some(pos) = stored {
+        // Anchor under the tray icon, exactly like a click would.
+        place_popup(&window, pos);
+    } else if let Ok(Some(monitor)) = window.current_monitor() {
+        // Fallback (never saw the tray yet): top-right under the menu bar.
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let m_pos = monitor.position();
+        let m_size = monitor.size();
+        let win_w = window
+            .outer_size()
+            .map(|s| s.width as f64)
+            .unwrap_or(POPUP_WIDTH * scale);
+        let x = m_pos.x as f64 + m_size.width as f64 - win_w - 10.0 * scale;
+        let y = m_pos.y as f64 + 32.0 * scale;
+        let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+    }
+
     let _ = window.show();
     let _ = window.set_focus();
 }
