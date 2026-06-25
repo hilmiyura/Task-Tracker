@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 
 const WINDOW_WIDTH = 300;
 const MAX_WINDOW_HEIGHT = 480;
@@ -113,8 +114,10 @@ export default function App() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [savedHint, setSavedHint] = useState("");
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [onLeave, setOnLeave] = useState(false);
   const startedAt = useRef<Date | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const forceStopRef = useRef<() => void>(() => {});
 
   // Resize the window to fit the panel content (capped), so there is no empty
   // space when there are few/no entries.
@@ -135,11 +138,22 @@ export default function App() {
     return () => ro.disconnect();
   }, []);
 
-  // load the saved webhook URL once
+  // load saved settings once
   useEffect(() => {
     invoke<string>("get_webhook_url")
       .then((u) => setWebhookUrl(u))
       .catch(() => {});
+    invoke<boolean>("get_on_leave")
+      .then((v) => setOnLeave(v))
+      .catch(() => {});
+  }, []);
+
+  // the backend force-stops a running task at 18:00 by emitting "force-stop"
+  useEffect(() => {
+    const unlisten = listen("force-stop", () => forceStopRef.current());
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
 
   // tick the live timer every second while running
@@ -215,10 +229,19 @@ export default function App() {
       .catch((err: string) => patchEntry(id, { status: "error", error: String(err) }));
   }
 
+  // keep the force-stop listener pointed at the latest handleStop
+  forceStopRef.current = handleStop;
+
+  function toggleOnLeave() {
+    const next = !onLeave;
+    setOnLeave(next);
+    invoke("set_on_leave", { value: next }).catch(() => {});
+  }
+
   function saveWebhook() {
     invoke("set_webhook_url", { url: webhookUrl })
       .then(() => {
-        setSavedHint("Tersimpan ✓");
+        setSavedHint("Saved ✓");
         setTimeout(() => setSavedHint(""), 1500);
       })
       .catch((err: string) => setSavedHint(String(err)));
@@ -290,6 +313,33 @@ export default function App() {
       {view === "settings" ? (
         /* Settings */
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3.5 py-3">
+          {/* On Leave — pause all reminders */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[12px] font-medium">On Leave</div>
+              <div className="text-[10px] text-black/40 dark:text-white/40">
+                Pause all notifications
+              </div>
+            </div>
+            <button
+              onClick={toggleOnLeave}
+              role="switch"
+              aria-checked={onLeave}
+              title="On Leave"
+              className={`relative h-5 w-9 shrink-0 rounded-full transition ${
+                onLeave ? "bg-blue-500" : "bg-black/15 dark:bg-white/20"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                  onLeave ? "left-[18px]" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="my-1 border-t border-black/10 dark:border-white/10" />
+
           <label className="text-[11px] font-medium text-black/55 dark:text-white/55">
             Google Sheets — Webhook URL
           </label>
@@ -305,15 +355,15 @@ export default function App() {
               onClick={saveWebhook}
               className="rounded-[7px] bg-blue-500 px-3 py-1.5 text-[12px] font-medium text-white shadow-sm transition hover:bg-blue-600 active:scale-[0.99]"
             >
-              Simpan
+              Save
             </button>
             {savedHint && (
               <span className="text-[11px] text-black/50 dark:text-white/50">{savedHint}</span>
             )}
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-black/40 dark:text-white/40">
-            Tempel URL Web App dari Apps Script (Deploy → Web app). Data dikirim
-            otomatis saat menekan Stop.
+            Paste the Web App URL from Apps Script (Deploy → Web app). Data is
+            sent automatically when you press Stop.
           </p>
         </div>
       ) : view === "system" ? (
@@ -321,7 +371,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 py-3">
           {!metrics ? (
             <div className="flex flex-1 items-center justify-center text-[12px] text-black/40 dark:text-white/40">
-              Membaca metrik…
+              Reading metrics…
             </div>
           ) : (
             <>
@@ -363,7 +413,7 @@ export default function App() {
               </div>
 
               <p className="mt-auto text-[10px] text-black/35 dark:text-white/35">
-                Diperbarui tiap 2 detik · disk = volume utama
+                Updated every 2s · disk = primary volume
               </p>
             </>
           )}
@@ -376,7 +426,7 @@ export default function App() {
             value={task}
             onChange={(e) => setTask(e.target.value)}
             disabled={running}
-            placeholder="Apa yang sedang kamu kerjakan?"
+            placeholder="What are you working on?"
             className="w-full rounded-[7px] border border-black/10 bg-black/[0.04] px-2.5 py-1.5 text-[13px] text-black/85 placeholder-black/35 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/90 dark:placeholder-white/30"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !running) handleStart();
@@ -418,7 +468,7 @@ export default function App() {
           {entries.length > 0 && (
             <div className="mt-0.5">
               <div className="mb-1 px-0.5 text-[10px] font-medium uppercase tracking-wider text-black/35 dark:text-white/35">
-                Tercatat
+                Logged
               </div>
               <ul className="flex flex-col">
                 {entries.map((e) => (
@@ -431,8 +481,8 @@ export default function App() {
                         e.status === "error"
                           ? e.error
                           : e.status === "ok"
-                          ? "Tersimpan ke Sheets"
-                          : "Mengirim…"
+                          ? "Saved to Sheets"
+                          : "Sending…"
                       }
                       className="shrink-0"
                     >
