@@ -42,6 +42,8 @@ pub fn run() {
             tray::set_tray_state,
             sheets::get_webhook_url,
             sheets::set_webhook_url,
+            sheets::get_sheet_name,
+            sheets::set_sheet_name,
             sheets::get_on_leave,
             sheets::set_on_leave,
             sheets::sync_entry,

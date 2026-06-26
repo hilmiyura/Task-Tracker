@@ -18,6 +18,8 @@ struct Config {
     #[serde(default)]
     webhook_url: String,
     #[serde(default)]
+    sheet_name: String,
+    #[serde(default)]
     on_leave: bool,
 }
 
@@ -70,6 +72,20 @@ pub fn set_webhook_url(app: AppHandle, url: String) -> Result<(), String> {
     save_config(&app, &cfg)
 }
 
+/// Return the target sheet/tab name (empty if unset).
+#[tauri::command]
+pub fn get_sheet_name(app: AppHandle) -> String {
+    load_config(&app).sheet_name
+}
+
+/// Persist the target sheet/tab name, preserving other settings.
+#[tauri::command]
+pub fn set_sheet_name(app: AppHandle, name: String) -> Result<(), String> {
+    let mut cfg = load_config(&app);
+    cfg.sheet_name = name.trim().to_string();
+    save_config(&app, &cfg)
+}
+
 /// Return whether On Leave (notifications paused) is enabled.
 #[tauri::command]
 pub fn get_on_leave(app: AppHandle) -> bool {
@@ -89,9 +105,19 @@ pub fn set_on_leave(app: AppHandle, value: bool) -> Result<(), String> {
 /// POST a finished entry to the configured Apps Script webhook.
 #[tauri::command]
 pub async fn sync_entry(app: AppHandle, entry: Entry) -> Result<(), String> {
-    let url = load_config(&app).webhook_url;
-    if url.is_empty() {
+    let cfg = load_config(&app);
+    if cfg.webhook_url.is_empty() {
         return Err("Webhook URL not set. Open Settings (⚙︎).".into());
+    }
+
+    // Merge the configured target sheet/tab name into the POST body so the
+    // Apps Script can route the row without the tab name being hardcoded.
+    let mut body = serde_json::to_value(&entry).map_err(|e| e.to_string())?;
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert(
+            "sheet".to_string(),
+            serde_json::Value::String(cfg.sheet_name),
+        );
     }
 
     let client = reqwest::Client::builder()
@@ -99,8 +125,8 @@ pub async fn sync_entry(app: AppHandle, entry: Entry) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     let resp = client
-        .post(&url)
-        .json(&entry)
+        .post(&cfg.webhook_url)
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("Connection failed: {e}"))?;

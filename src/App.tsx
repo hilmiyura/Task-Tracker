@@ -112,6 +112,7 @@ export default function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [view, setView] = useState<View>("main");
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [sheetName, setSheetName] = useState("");
   const [savedHint, setSavedHint] = useState("");
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [onLeave, setOnLeave] = useState(false);
@@ -142,6 +143,9 @@ export default function App() {
   useEffect(() => {
     invoke<string>("get_webhook_url")
       .then((u) => setWebhookUrl(u))
+      .catch(() => {});
+    invoke<string>("get_sheet_name")
+      .then((n) => setSheetName(n))
       .catch(() => {});
     invoke<boolean>("get_on_leave")
       .then((v) => setOnLeave(v))
@@ -238,8 +242,11 @@ export default function App() {
     invoke("set_on_leave", { value: next }).catch(() => {});
   }
 
-  function saveWebhook() {
-    invoke("set_webhook_url", { url: webhookUrl })
+  function saveSettings() {
+    Promise.all([
+      invoke("set_webhook_url", { url: webhookUrl }),
+      invoke("set_sheet_name", { name: sheetName }),
+    ])
       .then(() => {
         setSavedHint("Saved ✓");
         setTimeout(() => setSavedHint(""), 1500);
@@ -347,12 +354,24 @@ export default function App() {
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             placeholder="https://script.google.com/macros/s/…/exec"
-            rows={4}
+            rows={3}
             className="w-full resize-none rounded-[7px] border border-black/10 bg-black/[0.04] px-2.5 py-1.5 text-[11px] leading-snug text-black/85 placeholder-black/35 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/90 dark:placeholder-white/30"
           />
+
+          <label className="mt-1 text-[11px] font-medium text-black/55 dark:text-white/55">
+            Sheet name (tab)
+          </label>
+          <input
+            type="text"
+            value={sheetName}
+            onChange={(e) => setSheetName(e.target.value)}
+            placeholder="e.g. Muhammad Hilmi Yura"
+            className="w-full rounded-[7px] border border-black/10 bg-black/[0.04] px-2.5 py-1.5 text-[12px] text-black/85 placeholder-black/35 outline-none transition focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/90 dark:placeholder-white/30"
+          />
+
           <div className="flex items-center gap-2">
             <button
-              onClick={saveWebhook}
+              onClick={saveSettings}
               className="rounded-[7px] bg-blue-500 px-3 py-1.5 text-[12px] font-medium text-white shadow-sm transition hover:bg-blue-600 active:scale-[0.99]"
             >
               Save
@@ -362,8 +381,8 @@ export default function App() {
             )}
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-black/40 dark:text-white/40">
-            Paste the Web App URL from Apps Script (Deploy → Web app). Data is
-            sent automatically when you press Stop.
+            Paste the Web App URL from Apps Script (Deploy → Web app) and the tab
+            name rows should go to. Sent automatically when you press Stop.
           </p>
         </div>
       ) : view === "system" ? (
