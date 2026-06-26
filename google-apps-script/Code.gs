@@ -2,7 +2,7 @@
  * Task Tracker — Google Apps Script Web App
  *
  * Menerima POST JSON dari aplikasi Task Tracker dan menuliskannya ke baris baru
- * pada tab "Muhammad Hilmi Yura" dengan pemetaan kolom:
+ * pada tab sesuai "Sheet name" yang dikirim aplikasi. Pemetaan kolom:
  *   B = tanggal   (date)
  *   C = jam mulai (start)
  *   D = jam akhir (end)
@@ -21,8 +21,11 @@
  *  6. Salin "Web app URL" (berakhiran /exec) → tempel ke Settings (⚙︎) di app.
  */
 
-// Nama tab tujuan — HANYA tab ini yang diisi.
-var SHEET_NAME = "Muhammad Hilmi Yura";
+// Script ini HARUS dibuat dari dalam sheet (Extensions > Apps Script) supaya
+// getActiveSpreadsheet() menunjuk ke spreadsheet ini.
+//
+// Nama tab WAJIB dikirim aplikasi (field "sheet" dari Settings). Tidak ada
+// default — kalau kosong, request ditolak.
 
 // Pemetaan kolom (nomor kolom: B=2, C=3, D=4, I=9).
 var COL_DATE = 2; // B
@@ -39,10 +42,16 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
+    // Tab name is required — it comes from the app (Settings → Sheet name).
+    var sheetName = data.sheet ? String(data.sheet).trim() : "";
+    if (!sheetName) {
+      return json({ ok: false, error: "Sheet name is required (set it in app Settings)" });
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(SHEET_NAME);
+    var sheet = ss.getSheetByName(sheetName);
     if (!sheet) {
-      return json({ ok: false, error: 'Tab "' + SHEET_NAME + '" tidak ditemukan' });
+      return json({ ok: false, error: 'Tab "' + sheetName + '" not found' });
     }
 
     var row = firstEmptyRow(sheet);
